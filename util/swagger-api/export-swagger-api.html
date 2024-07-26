@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Swagger API</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .nav-tabs .nav-link {
+            border: 1px solid #dee2e6;
+            border-radius: .25rem;
+        }
+        .nav-tabs .nav-link.active {
+            color: #fff;
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .nav-tabs .nav-link:hover {
+            color: #0056b3;
+        }
+        .tab-pane {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            padding: 15px;
+            border-radius: .25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Export Swagger API</h1>
+        
+        <!-- Tabs for language selection -->
+        <ul class="nav nav-tabs" id="language-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="tab-cn" data-toggle="tab" href="#description-cn" role="tab">中文</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="tab-en" data-toggle="tab" href="#description-en" role="tab">English</a>
+            </li>
+        </ul>
+
+        <!-- Tab content -->
+        <div class="tab-content mt-3">
+            <div class="tab-pane fade show active" id="description-cn" role="tabpanel">
+                <p>这个工具允许您下载来自多个 Swagger API 文档 URL 的 API 详细信息。包含的详细信息包括：
+                    <ul>
+                        <li><strong>地址：</strong> API 文档的 URL。</li>
+                        <li><strong>服务器：</strong> API 服务器 URL。</li>
+                        <li><strong>标签：</strong> 与每个 API 关联的标签。</li>
+                        <li><strong>简介：</strong> API 的简要描述。</li>
+                        <li><strong>路径：</strong> API 中的特定路径。</li>
+                        <li><strong>请求方式：</strong> 用于 API 的 HTTP 方法（如 GET、POST 等）。</li>
+                    </ul>
+                    数据将被导出为 Excel (.xlsx) 文件，以便于分析和参考。
+                </p>
+            </div>
+
+            <div class="tab-pane fade" id="description-en" role="tabpanel">
+                <p>This tool allows you to download the details of API endpoints from multiple Swagger API documentation URLs. The details include:
+                    <ul>
+                        <li><strong>Address:</strong> The base URL of the API documentation.</li>
+                        <li><strong>Server:</strong> The base URL of Server.</li>
+                        <li><strong>Tags:</strong> The tags associated with each API endpoint.</li>
+                        <li><strong>Summary:</strong> A brief description of what the API endpoint does.</li>
+                        <li><strong>Path:</strong> The specific endpoint path within the API.</li>
+                        <li><strong>Method:</strong> The HTTP method used for the API endpoint (GET, POST, etc.).</li>
+                    </ul>
+                    The data will be exported as an Excel (.xlsx) file for easy analysis and reference.
+                </p>
+            </div>
+        </div>
+
+        <!-- Textarea for API documentation URLs -->
+        <div class="mt-3">
+            <label for="api-urls" class="form-label">API 文档地址 (每行一个, 例如: http://ip:port/v3/api-docs 或 http://ip:port/v2/api-docs):</label>
+            <textarea id="api-urls" class="form-control" rows="5" placeholder="输入 API 文档地址"></textarea>
+        </div>
+
+        <button id="download" class="btn btn-success mt-3">下载 .xlsx</button>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        document.getElementById('download').addEventListener('click', () => {
+            const textarea = document.getElementById('api-urls');
+            const rawInput = textarea.value.trim();
+
+            if (!rawInput) {
+                alert('请输入至少一个 API 文档地址');
+                return;
+            }
+
+            const addresses = rawInput.split('\n').map(url => url.trim()).filter(url => url);
+
+            const logData = [];
+
+            Promise.all(addresses.map(address => 
+                fetch(address)
+                    .then(response => response.json())
+                    .then(data => {
+                        const serverUrls = data.servers ? data.servers.map(server => server.url).join(', ') : '';
+                        return Object.entries(data.paths).flatMap(([path, methods]) => 
+                            Object.entries(methods).map(([method, details]) => ({
+                                Address: address,
+                                Server: serverUrls,
+                                Tags: details.tags?.join(', ') || '无标签',
+                                Summary: details.summary || '无描述',
+                                Path: path,
+                                Method: method.toUpperCase()
+                            }))
+                        );
+                    })
+            ))
+            .then(results => {
+                results.flat().forEach(item => logData.push(item));
+
+                const ws = XLSX.utils.json_to_sheet(logData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Swagger Info');
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'swagger-info.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+            })
+            .catch(error => alert(`Error fetching Swagger JSON: ${error}`));
+        });
+    </script>
+</body>
+</html>
